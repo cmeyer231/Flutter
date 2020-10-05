@@ -34,8 +34,7 @@ namespace Test_webapp
             if (env.IsDevelopment())
             {
                 app.UseDeveloperExceptionPage();
-            }
-            // Enable middleware to serve generated Swagger as a JSON endpoint.
+                 // Enable middleware to serve generated Swagger as a JSON endpoint.
             app.UseSwagger();
 
             // Enable middleware to serve swagger-ui (HTML, JS, CSS, etc.),
@@ -45,6 +44,8 @@ namespace Test_webapp
                 c.SwaggerEndpoint("/swagger/v1/swagger.json", "My API V1");
                 c.RoutePrefix = string.Empty;
             });
+            }
+           
             app.UseRouting();
 
             app.UseAuthorization();
