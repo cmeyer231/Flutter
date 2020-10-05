@@ -1,0 +1,105 @@
+# The following script will work for any project that can be built from command line by msbuild
+# It uses powershell shell executor, so you need to add the following line to your config.toml file
+# (located in gitlab-runner.exe directory):
+#   shell = "powershell"
+#
+# The script is composed of 3 stages: build, test and deploy.
+#
+# The build stage restores NuGet packages and uses msbuild to build the exe and msi
+# One major issue you'll find is that you can't build msi projects from command line
+# if you use vdproj.  There are workarounds building msi via devenv, but they rarely work
+# The best solution is migrating your vdproj projects to WiX, as it can be build directly
+# by msbuild.
+#
+# The test stage runs nunit from command line against Test project inside your solution
+# It also saves the resulting TestResult.xml file
+#
+# The deploy stage copies the exe and msi from build stage to a network drive
+# You need to have the network drive mapped as Local System user for gitlab-runner service to see it
+# The best way to persist the mapping is via a scheduled task (see: https://stackoverflow.com/a/7867064/1288473),
+# running the following batch command: net use P: \\x.x.x.x\Projects /u:your_user your_pass /persistent:yes
+
+
+# place project specific paths in variables to make the rest of the script more generic
+variables:
+  APK_RELEASE_FOLDER: 'example_app\build\app\outputs\apk\release'
+  BUNDLE_REALESE_FOLDER: 'example_app\build\app\outputs\bundle\release'
+  DOTNET_RELEASE_FOLDER: 'Test_webapp\bin\Release\netcoreapp31'
+  DEPLOY_FOLDER: 'B:\FlutterExample'
+  
+
+stages:
+  - buildDotNet
+  - build
+  - publish
+  - test
+
+buildDotNet_job:
+  stage: buildDotNet
+  only:
+    - tags
+  tags:
+    - csharp
+  before_script:
+    - 'cd Test_webapp'
+    - 'dotnet restore'
+  script:
+    - 'dotnet build --configuration Release'
+    - 'mv bin\Release\netcoreapp3.1 bin\Release\netcoreapp31'
+  artifacts:
+    expire_in: 1 week  # save gitlab server space, we copy the files we need to deploy folder later on
+    paths:
+      - '$env:DOTNET_RELEASE_FOLDER\*'  # saving exe to copy to deploy folder
+
+build_job:
+  stage: build
+  only:
+    - tags
+  tags:
+    - flutter
+  before_script:
+    - 'cd example_app'
+    - 'flutter packages get'
+    - 'flutter clean'
+  script:
+    - 'flutter doctor'
+    - 'flutter build apk --target-platform android-arm,android-arm64,android-x64 --split-per-abi'  # build flutter app
+    - 'flutter build appbundle'
+  artifacts:
+    expire_in: 1 week  # save gitlab server space, we copy the files we need to deploy folder later on
+    paths:
+      - '$env:APK_RELEASE_FOLDER\*'  # saving exe to copy to deploy folder
+      - '$env:BUNDLE_REALESE_FOLDER\*'
+publish_job:
+  stage: publish
+  tags:
+    - flutter
+  only:
+    - tags
+  script:
+    # Compose a folder for each release based on commit tag.
+    # Assuming your tag is Rev1.0.0.1, and your last commit message is 'First commit'
+    # the artifact files will be copied to:
+    # P:\Projects\YourApp\Builds\Rev1.0.0.1 - First commit\
+    - '$deployFolderAPK = $($env:DEPLOY_FOLDER) + "\" + $($env:CI_BUILD_TAG)+ "\APK"'
+    - '$deployFolderAPB = $($env:DEPLOY_FOLDER) + "\" + $($env:CI_BUILD_TAG)+ "\Bundle"'
+    - '$deployFolderEXE = $($env:DEPLOY_FOLDER) + "\" + $($env:CI_BUILD_TAG)+ "\EXE"'
+    - 'if(Test-Path B:){net use B: /delete}'
+    - 'if(!(Test-Path B:)){net use B: \\192.168.0.151\File\Dev\Projects}'
+    - 'net use'
+    # xcopy takes care of recursively creating required folders
+    - 'xcopy /y "$env:APK_RELEASE_FOLDER" "$deployFolderAPK" /E/H/C/I'
+    - 'xcopy /y "$env:BUNDLE_REALESE_FOLDER" "$deployFolderAPB" /E/H/C/I'
+    - 'xcopy /y "$env:DOTNET_RELEASE_FOLDER" "$deployFolderEXE" /E/H/C/I'
+    - 'net use B: /delete'
+  dependencies:
+    - build_job
+    - buildDotNet_job
+    
+test_job:
+  stage: test
+  script:
+    - 'cd example_app'
+    - 'flutter test'
+  tags:
+    - flutter
