@@ -15,7 +15,10 @@ namespace Test_webapp.Controllers
         {
             "Freezing", "Bracing", "Chilly", "Cool", "Mild", "Warm", "Balmy", "Hot", "Sweltering", "Scorching"
         };
-
+private static readonly string[] SummariesSummer = new[]
+        {
+             "Warm", "Balmy", "Hot", "Sweltering", "Scorching"
+        };
         private readonly ILogger<WeatherForecastController> _logger;
 
         public WeatherForecastController(ILogger<WeatherForecastController> logger)
@@ -27,11 +30,23 @@ namespace Test_webapp.Controllers
         public IEnumerable<WeatherForecast> Get()
         {
             var rng = new Random();
-            return Enumerable.Range(1, 5).Select(index => new WeatherForecast
+            return Enumerable.Range(1, 15).Select(index => new WeatherForecast
             {
                 Date = DateTime.Now.AddDays(index),
-                TemperatureC = rng.Next(-20, 55),
+                TemperatureC = rng.Next(-10, 55),
                 Summary = Summaries[rng.Next(Summaries.Length)]
+            })
+            .ToArray();
+        }
+        [HttpGet]
+        public IEnumerable<WeatherForecast> GetSummer()
+        {
+            var rng = new Random();
+            return Enumerable.Range(1, 15).Select(index => new WeatherForecast
+            {
+                Date = DateTime.Now.AddDays(index),
+                TemperatureC = rng.Next(-50, 95),
+                Summary = SummariesSummer[rng.Next(SummariesSummer.Length)]
             })
             .ToArray();
         }
